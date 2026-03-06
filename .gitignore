@@ -6,6 +6,13 @@
 # ─── Secrets ───────────────────────────────────
 secrets/
 *.pem
+*.key
+*.p12
+*.pfx
+*_rsa
+*_rsa.pub
+service-account*.json
+firebase-adminsdk*.json
 
 # ─── Node / Frontend ───────────────────────────
 node_modules/
@@ -47,6 +54,7 @@ __pycache__/
 *.py[cod]
 *.egg-info/
 .venv/
+dist-info/
 
 # ─── OS ────────────────────────────────────────
 .DS_Store
@@ -61,7 +69,7 @@ desktop.ini
 
 # ─── Claude ────────────────────────────────────
 .claude/
-
+CLAUDE.md
 # ─── NotebookLM (vendored tool, not project code) ──
 NotebookLM-Antigravity/
 

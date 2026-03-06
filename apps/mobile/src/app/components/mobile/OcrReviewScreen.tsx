@@ -1,65 +1,73 @@
 import { ArrowLeft, CheckCircle2, AlertTriangle, XCircle, ZoomIn, FileText } from "lucide-react";
-import { motion, AnimatePresence } from "motion/react";
-import { useState } from "react";
+import { motion } from "motion/react";
+import { useState, useCallback } from "react";
+import { toast } from "sonner";
+import { useOcrReviewQueue, useOcrActions, type OcrJob } from "../../hooks/useDomain";
+import { useAuth } from "../../context/AuthContext";
+import { apiFetch } from "../../hooks/useApi";
 
 interface OcrReviewScreenProps {
   onBack: () => void;
 }
 
-const ocrReviewQueue = [
+// Map raw API data fields to display fields with confidence thresholds
+function buildDisplayFields(job: OcrJob) {
+  const d = job.data;
+  const fields: { key: string; label: string; value: string; confidence: number; status: "ok" | "warning" | "error" }[] = [];
+
+  const push = (key: string, label: string, value: string | number | null | undefined, confOffset = 0) => {
+    const val = value != null ? String(value) : "";
+    if (!val) return;
+    // Use job overall confidence per-field, adjusted slightly per field
+    const c = Math.min(1, Math.max(0, job.confidence + confOffset));
+    const status: "ok" | "warning" | "error" = c >= 0.90 ? "ok" : c >= 0.75 ? "warning" : "error";
+    fields.push({ key, label, value: val, confidence: Math.round(c * 100) / 100, status });
+  };
+
+  push("shipper_name",      "荷主名",   d.shipper_name,      0.02);
+  push("cargo_description", "品名",     d.cargo_description, 0.01);
+  push("weight_kg",         "重量",     d.weight_kg != null ? `${d.weight_kg} kg` : null, 0);
+  push("shipper_address",   "集荷先",   d.shipper_address,   -0.05);
+  push("consignee_address", "配達先",   d.consignee_address, 0.01);
+  push("pickup_datetime",   "集荷日時", d.pickup_datetime,   0.02);
+  push("phone",             "電話番号", d.phone,             -0.15);
+
+  return fields;
+}
+
+// Static demo queue used when API returns empty (no DB yet)
+const DEMO_QUEUE: OcrJob[] = [
   {
-    id: "ocr-001",
+    job_id: "demo-001",
+    status: "completed",
     confidence: 0.873,
-    source: "FAX",
-    senderFax: "06-1234-5678",
-    receivedAt: "3月5日 14:23",
-    processingTime: 12.3,
-    engine: "PaddleOCR + Gemini 3 Pro",
-    fields: [
-      { key: "shipper_name", label: "荷主名", value: "田中商事㈱", confidence: 0.99, status: "ok" as const },
-      { key: "cargo_name", label: "品名", value: "精密機器", confidence: 0.97, status: "ok" as const },
-      { key: "weight", label: "重量", value: "3,500 kg", confidence: 0.98, status: "ok" as const },
-      { key: "pickup_address", label: "集荷先", value: "大阪市中央区本町3-2-8", confidence: 0.82, status: "warning" as const },
-      { key: "delivery_address", label: "配達先", value: "東京都港区芝浦4-16-23", confidence: 0.95, status: "ok" as const },
-      { key: "datetime", label: "日時", value: "3月7日 09:00-12:00", confidence: 0.93, status: "ok" as const },
-      { key: "phone", label: "電話番号", value: "090-1234-56??", confidence: 0.45, status: "error" as const },
-    ],
+    needs_review: true,
+    queued_at: new Date(Date.now() - 30 * 60000).toISOString(),
+    data: {
+      shipper_name: "田中商事㈱",
+      shipper_address: "大阪市中央区本町3-2-8",
+      consignee_address: "東京都港区芝浦4-16-23",
+      cargo_description: "精密機器",
+      weight_kg: 3500,
+      pickup_datetime: "3月7日 09:00-12:00",
+      phone: "090-1234-56??",
+    },
   },
   {
-    id: "ocr-002",
+    job_id: "demo-002",
+    status: "completed",
     confidence: 0.945,
-    source: "FAX",
-    senderFax: "03-9876-5432",
-    receivedAt: "3月5日 13:10",
-    processingTime: 8.7,
-    engine: "PaddleOCR + Gemini 3 Pro",
-    fields: [
-      { key: "shipper_name", label: "荷主名", value: "山田電機㈱", confidence: 0.99, status: "ok" as const },
-      { key: "cargo_name", label: "品名", value: "電子部品", confidence: 0.98, status: "ok" as const },
-      { key: "weight", label: "重量", value: "2,100 kg", confidence: 0.97, status: "ok" as const },
-      { key: "pickup_address", label: "集荷先", value: "名古屋市中区栄2-17-1", confidence: 0.96, status: "ok" as const },
-      { key: "delivery_address", label: "配達先", value: "横浜市中区桜木町1-1", confidence: 0.94, status: "ok" as const },
-      { key: "datetime", label: "日時", value: "3月6日 14:00-18:00", confidence: 0.91, status: "ok" as const },
-      { key: "phone", label: "電話番号", value: "052-123-4567", confidence: 0.95, status: "ok" as const },
-    ],
-  },
-  {
-    id: "ocr-003",
-    confidence: 0.781,
-    source: "手書きFAX",
-    senderFax: "092-456-7890",
-    receivedAt: "3月5日 11:45",
-    processingTime: 18.5,
-    engine: "PaddleOCR + Gemini 3 Pro",
-    fields: [
-      { key: "shipper_name", label: "荷主名", value: "佐藤テキスタイル㈱", confidence: 0.88, status: "warning" as const },
-      { key: "cargo_name", label: "品名", value: "衣料品", confidence: 0.85, status: "warning" as const },
-      { key: "weight", label: "重量", value: "1,800 kg", confidence: 0.92, status: "ok" as const },
-      { key: "pickup_address", label: "集荷先", value: "福岡市博多区博多駅南5-??-3", confidence: 0.55, status: "error" as const },
-      { key: "delivery_address", label: "配達先", value: "広島市中区基町6-78", confidence: 0.79, status: "warning" as const },
-      { key: "datetime", label: "日時", value: "3月8日 06:00-12:00", confidence: 0.70, status: "warning" as const },
-      { key: "phone", label: "電話番号", value: "092-???-7890", confidence: 0.35, status: "error" as const },
-    ],
+    needs_review: true,
+    queued_at: new Date(Date.now() - 60 * 60000).toISOString(),
+    data: {
+      shipper_name: "山田電機㈱",
+      shipper_address: "名古屋市中区栄2-17-1",
+      consignee_address: "横浜市中区桜木町1-1",
+      cargo_description: "電子部品",
+      weight_kg: 2100,
+      pickup_datetime: "3月6日 14:00-18:00",
+      phone: "052-123-4567",
+    },
   },
 ];
 
@@ -90,13 +98,78 @@ function ConfidenceBar({ confidence }: { confidence: number }) {
 }
 
 export function OcrReviewScreen({ onBack }: OcrReviewScreenProps) {
-  const [currentIndex, setCurrentIndex] = useState(0);
+  const { token, refreshToken } = useAuth();
+  const { data: apiQueue, loading, refetch } = useOcrReviewQueue();
+  const { mutate } = useOcrActions();
+
+  const [processedIds, setProcessedIds] = useState<Set<string>>(new Set());
   const [editingField, setEditingField] = useState<string | null>(null);
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
-  const [processedIds, setProcessedIds] = useState<Set<string>>(new Set());
 
-  const remaining = ocrReviewQueue.filter((q) => !processedIds.has(q.id));
-  const current = remaining[0] || ocrReviewQueue[currentIndex];
+  // Use API data when available, fall back to demo
+  const rawQueue: OcrJob[] = (apiQueue && apiQueue.length > 0) ? apiQueue : DEMO_QUEUE;
+  const queue = rawQueue.filter((q) => !processedIds.has(q.job_id));
+  const current = queue[0];
+
+  const getFieldValue = (jobId: string, field: ReturnType<typeof buildDisplayFields>[0]) =>
+    fieldValues[`${jobId}-${field.key}`] ?? field.value;
+
+  const handleApprove = useCallback(async () => {
+    if (!current) return;
+    // Collect any manually corrected fields
+    const corrected: Record<string, string> = {};
+    for (const [k, v] of Object.entries(fieldValues)) {
+      if (k.startsWith(`${current.job_id}-`)) {
+        corrected[k.replace(`${current.job_id}-`, "")] = v;
+      }
+    }
+    try {
+      await apiFetch(
+        `/api/v1/ocr/jobs/${current.job_id}/confirm`,
+        token,
+        refreshToken,
+        { method: "POST", body: JSON.stringify({ fields: corrected }) },
+      );
+      toast.success("承認して配送依頼を作成しました");
+    } catch {
+      toast.error("送信に失敗しました（デモ承認）");
+    }
+    setProcessedIds((prev) => new Set([...prev, current.job_id]));
+    setEditingField(null);
+    setFieldValues({});
+  }, [current, fieldValues, token, refreshToken]);
+
+  const handleReject = useCallback(async () => {
+    if (!current) return;
+    try {
+      await apiFetch(
+        `/api/v1/ocr/jobs/${current.job_id}/reject`,
+        token,
+        refreshToken,
+        { method: "POST" },
+      );
+      toast.info("却下しました");
+    } catch {
+      // silent — still remove from queue
+    }
+    setProcessedIds((prev) => new Set([...prev, current.job_id]));
+    setEditingField(null);
+    setFieldValues({});
+  }, [current, token, refreshToken]);
+
+  const statusIcon = (status: string) => {
+    if (status === "ok") return <CheckCircle2 size={14} className="text-[#10B981] shrink-0" />;
+    if (status === "warning") return <AlertTriangle size={14} className="text-[#F59E0B] shrink-0" />;
+    return <XCircle size={14} className="text-[#EF4444] shrink-0" />;
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ background: "#0A1628" }}>
+        <div className="w-8 h-8 rounded-full border-2 border-[#06B6D4] border-t-transparent animate-spin" />
+      </div>
+    );
+  }
 
   if (!current) {
     return (
@@ -104,34 +177,18 @@ export function OcrReviewScreen({ onBack }: OcrReviewScreenProps) {
         <CheckCircle2 size={48} className="text-[#10B981] mb-4" />
         <p className="text-white text-[16px] mb-2" style={{ fontFamily: "'Noto Sans JP', sans-serif", fontWeight: 600 }}>すべて処理済み</p>
         <p className="text-slate-400 text-[13px] mb-6" style={{ fontFamily: "'Noto Sans JP', sans-serif" }}>キューに待ちはありません</p>
-        <button onClick={onBack} className="px-6 py-3 rounded-xl text-white text-[14px]" style={{ background: "linear-gradient(135deg, #2563EB, #06B6D4)", fontFamily: "'Noto Sans JP', sans-serif", fontWeight: 600 }}>
-          ホームに戻る
+        <button
+          onClick={() => { setProcessedIds(new Set()); refetch(); }}
+          className="px-6 py-3 rounded-xl text-white text-[14px]"
+          style={{ background: "linear-gradient(135deg, #2563EB, #06B6D4)", fontFamily: "'Noto Sans JP', sans-serif", fontWeight: 600 }}
+        >
+          更新する
         </button>
       </div>
     );
   }
 
-  const handleApprove = () => {
-    setProcessedIds((prev) => new Set([...prev, current.id]));
-    setEditingField(null);
-    setFieldValues({});
-  };
-
-  const handleReject = () => {
-    setProcessedIds((prev) => new Set([...prev, current.id]));
-    setEditingField(null);
-    setFieldValues({});
-  };
-
-  const getFieldValue = (field: typeof current.fields[0]) => {
-    return fieldValues[`${current.id}-${field.key}`] ?? field.value;
-  };
-
-  const statusIcon = (status: string) => {
-    if (status === "ok") return <CheckCircle2 size={14} className="text-[#10B981] shrink-0" />;
-    if (status === "warning") return <AlertTriangle size={14} className="text-[#F59E0B] shrink-0" />;
-    return <XCircle size={14} className="text-[#EF4444] shrink-0" />;
-  };
+  const displayFields = buildDisplayFields(current);
 
   return (
     <div className="min-h-screen pb-24" style={{ background: "#0A1628" }}>
@@ -142,32 +199,32 @@ export function OcrReviewScreen({ onBack }: OcrReviewScreenProps) {
         </button>
         <h1 className="text-white text-[18px] flex-1" style={{ fontFamily: "'Noto Sans JP', sans-serif", fontWeight: 600 }}>OCR確認キュー</h1>
         <span className="bg-[#F59E0B] text-white text-[12px] px-2.5 py-0.5 rounded-full" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 600 }}>
-          {remaining.length}件待ち
+          {queue.length}件待ち
         </span>
       </div>
 
       <div className="px-5 mt-4 space-y-4">
-        {/* Confidence */}
         <ConfidenceBar confidence={current.confidence} />
 
-        {/* Image Viewer (Mock) */}
+        {/* Image viewer (mock frame) */}
         <div className="rounded-xl border border-slate-700/30 overflow-hidden" style={{ background: "rgba(15, 23, 42, 0.8)" }}>
           <div className="p-3 border-b border-slate-700/20 flex items-center justify-between">
             <span className="text-slate-400 text-[12px]" style={{ fontFamily: "'Noto Sans JP', sans-serif" }}>原本画像</span>
-            <span className="text-slate-500 text-[11px]" style={{ fontFamily: "'Noto Sans JP', sans-serif" }}>{current.source} · {current.senderFax}</span>
+            <span className="text-slate-500 text-[11px]" style={{ fontFamily: "'Inter', sans-serif" }}>{current.job_id.slice(0, 12)}</span>
           </div>
           <div className="h-[180px] flex items-center justify-center relative" style={{ background: "rgba(30, 41, 59, 0.5)" }}>
-            {/* Mock fax image representation */}
             <div className="w-[85%] h-[160px] rounded-lg bg-white/5 border border-dashed border-slate-600 p-3 overflow-hidden">
               <div className="space-y-2">
-                <div className="h-2 bg-slate-600/30 rounded w-1/3" />
-                <div className="h-2 bg-slate-600/30 rounded w-full" />
-                <div className="h-2 bg-slate-600/30 rounded w-4/5" />
-                <div className="h-2 bg-[#F59E0B]/20 rounded w-3/5 border border-[#F59E0B]/30" />
-                <div className="h-2 bg-slate-600/30 rounded w-full" />
-                <div className="h-2 bg-slate-600/30 rounded w-2/3" />
-                <div className="h-2 bg-[#EF4444]/20 rounded w-2/5 border border-[#EF4444]/30" />
-                <div className="h-2 bg-slate-600/30 rounded w-4/5" />
+                {[1/3, 1, 4/5, 3/5, 1, 2/3, 2/5, 4/5].map((w, i) => (
+                  <div
+                    key={i}
+                    className="h-2 rounded"
+                    style={{
+                      width: `${w * 100}%`,
+                      background: i === 3 ? "rgba(245,158,11,0.25)" : i === 6 ? "rgba(239,68,68,0.2)" : "rgba(100,116,139,0.3)",
+                    }}
+                  />
+                ))}
               </div>
             </div>
             <div className="absolute bottom-2 right-3 flex items-center gap-1 text-slate-500 text-[10px]">
@@ -177,16 +234,16 @@ export function OcrReviewScreen({ onBack }: OcrReviewScreenProps) {
           </div>
         </div>
 
-        {/* OCR Results Table */}
+        {/* OCR result fields */}
         <div className="rounded-xl border border-slate-700/30 overflow-hidden" style={{ background: "rgba(15, 23, 42, 0.8)" }}>
           <div className="p-3 border-b border-slate-700/20 flex items-center gap-2">
             <FileText size={16} className="text-[#06B6D4]" />
             <span className="text-white text-[13px]" style={{ fontFamily: "'Noto Sans JP', sans-serif", fontWeight: 600 }}>📋 OCR結果</span>
           </div>
 
-          {current.fields.map((field, i) => {
-            const isEditing = editingField === `${current.id}-${field.key}`;
-            const value = getFieldValue(field);
+          {displayFields.map((field, i) => {
+            const isEditing = editingField === `${current.job_id}-${field.key}`;
+            const value = getFieldValue(current.job_id, field);
 
             return (
               <motion.div
@@ -204,26 +261,20 @@ export function OcrReviewScreen({ onBack }: OcrReviewScreenProps) {
                     <input
                       type="text"
                       value={value}
-                      onChange={(e) => setFieldValues((prev) => ({ ...prev, [`${current.id}-${field.key}`]: e.target.value }))}
+                      onChange={(e) => setFieldValues((prev) => ({ ...prev, [`${current.job_id}-${field.key}`]: e.target.value }))}
                       onBlur={() => setEditingField(null)}
                       autoFocus
                       className="w-full bg-transparent text-white text-[14px] outline-none border-b-2 border-[#2563EB] pb-1"
-                      style={{ fontFamily: field.key === "phone" || field.key === "weight" ? "'Inter', sans-serif" : "'Noto Sans JP', sans-serif" }}
+                      style={{ fontFamily: "'Noto Sans JP', sans-serif" }}
                     />
                   ) : (
                     <div>
-                      <span
-                        className="text-white text-[14px]"
-                        style={{
-                          fontFamily: field.key === "phone" || field.key === "weight" ? "'Inter', sans-serif" : "'Noto Sans JP', sans-serif",
-                          fontWeight: 500,
-                        }}
-                      >
+                      <span className="text-white text-[14px]" style={{ fontFamily: "'Noto Sans JP', sans-serif", fontWeight: 500 }}>
                         {value}
                       </span>
                       {field.status !== "ok" && (
                         <button
-                          onClick={() => setEditingField(`${current.id}-${field.key}`)}
+                          onClick={() => setEditingField(`${current.job_id}-${field.key}`)}
                           className="text-[#2563EB] text-[11px] block mt-0.5"
                           style={{ fontFamily: "'Noto Sans JP', sans-serif" }}
                         >
@@ -239,13 +290,15 @@ export function OcrReviewScreen({ onBack }: OcrReviewScreenProps) {
           })}
         </div>
 
-        {/* Engine Info */}
+        {/* Engine info */}
         <div className="flex items-center justify-between text-slate-500 text-[11px] px-1">
-          <span style={{ fontFamily: "'JetBrains Mono', monospace" }}>OCR Engine: {current.engine}</span>
-          <span style={{ fontFamily: "'JetBrains Mono', monospace" }}>処理時間: {current.processingTime}秒</span>
+          <span style={{ fontFamily: "'JetBrains Mono', monospace" }}>Engine: PaddleOCR + Gemini 1.5 Pro</span>
+          <span style={{ fontFamily: "'JetBrains Mono', monospace" }}>
+            {current.queued_at ? new Date(current.queued_at).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" }) : "—"}
+          </span>
         </div>
 
-        {/* Action Buttons */}
+        {/* Action buttons */}
         <div className="flex gap-3 mt-2">
           <button
             onClick={handleReject}

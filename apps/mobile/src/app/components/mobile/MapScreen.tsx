@@ -1,14 +1,16 @@
-import { ArrowLeft, Truck, Layers, Filter } from "lucide-react";
+import { ArrowLeft, Truck, Layers, Wifi, WifiOff } from "lucide-react";
 import { motion } from "motion/react";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { FullMap, type TruckData } from "./LeafletMap";
+import { useWs } from "../../context/WsContext";
+import { useAuth } from "../../context/AuthContext";
 
 interface MapScreenProps {
   onBack: () => void;
 }
 
-const truckPositions: TruckData[] = [
-  { id: 1, plate: "大阪 11 あ 1234", driver: "田中太郎", load: 72, status: "partial", lat: 34.6937, lng: 135.5023 },
+// Demo trucks shown when no live WS data is available
+const DEMO_TRUCKS: TruckData[] = [
   { id: 2, plate: "東京 33 か 5678", driver: "佐藤花子", load: 100, status: "full", lat: 35.6762, lng: 139.6503 },
   { id: 3, plate: "名古屋 22 う 9012", driver: "鈴木一郎", load: 0, status: "empty", lat: 35.1815, lng: 136.9066 },
   { id: 4, plate: "福岡 44 え 3456", driver: "高橋誠", load: 45, status: "partial", lat: 33.5904, lng: 130.4017 },
@@ -30,8 +32,27 @@ const statusLabels: Record<string, string> = {
 };
 
 export function MapScreen({ onBack }: MapScreenProps) {
+  const { truckPositions: liveTrucks, isConnected } = useWs();
+  const { driver } = useAuth();
   const [selectedTruck, setSelectedTruck] = useState<number | null>(null);
   const [showLayers, setShowLayers] = useState(false);
+
+  // Merge live WS positions with demo trucks; live data takes priority
+  const truckPositions: TruckData[] = useMemo(() => {
+    const liveTruckData: TruckData[] = Object.values(liveTrucks).map((pos, i) => ({
+      id: 1000 + i,
+      plate: pos.driver_id === driver?.id ? (driver.vehicle_plate ?? "自車") : `ドライバー ${pos.driver_id.slice(0, 4)}`,
+      driver: pos.driver_id === driver?.id ? (driver.name ?? "あなた") : "ドライバー",
+      load: 72,
+      status: "partial" as const,
+      lat: pos.lat,
+      lng: pos.lng,
+    }));
+
+    // Show demo trucks when no live data, otherwise merge
+    return liveTruckData.length > 0 ? [...liveTruckData, ...DEMO_TRUCKS] : DEMO_TRUCKS;
+  }, [liveTrucks, driver]);
+
   const selected = truckPositions.find((t) => t.id === selectedTruck);
 
   const handleSelectTruck = useCallback((id: number | null) => {
@@ -46,15 +67,19 @@ export function MapScreen({ onBack }: MapScreenProps) {
           <ArrowLeft size={20} className="text-white" />
         </button>
         <div className="flex-1" />
+        {/* Live/offline badge */}
+        <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full backdrop-blur-xl" style={{ background: "rgba(10, 22, 40, 0.8)" }}>
+          {isConnected
+            ? <><Wifi size={14} className="text-[#10B981]" /><span className="text-[#10B981] text-[11px]" style={{ fontFamily: "'Inter', sans-serif" }}>LIVE</span></>
+            : <><WifiOff size={14} className="text-slate-500" /><span className="text-slate-500 text-[11px]" style={{ fontFamily: "'Inter', sans-serif" }}>DEMO</span></>
+          }
+        </div>
         <button
           onClick={() => setShowLayers(!showLayers)}
           className="p-2 rounded-xl backdrop-blur-xl"
           style={{ background: "rgba(10, 22, 40, 0.8)" }}
         >
           <Layers size={20} className="text-white" />
-        </button>
-        <button className="p-2 rounded-xl backdrop-blur-xl" style={{ background: "rgba(10, 22, 40, 0.8)" }}>
-          <Filter size={20} className="text-white" />
         </button>
       </div>
 

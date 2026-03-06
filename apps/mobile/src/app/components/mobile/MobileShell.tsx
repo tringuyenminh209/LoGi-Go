@@ -1,8 +1,10 @@
-import { useState } from "react";
+import { useEffect } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router";
 import { BottomNav } from "./BottomNav";
 import { EarthquakeAlert } from "./EarthquakeAlert";
 import { AnimatePresence, motion } from "motion/react";
+import { useWs } from "../../context/WsContext";
+import { useAuth } from "../../context/AuthContext";
 
 const HIDE_BOTTOM_NAV = ["/login", "/map"];
 
@@ -25,10 +27,29 @@ function getActiveNav(pathname: string): string {
 export function MobileShell() {
   const location = useLocation();
   const navigate = useNavigate();
-  const [showAlert, setShowAlert] = useState(false);
+  const { earthquakeAlert, dismissAlert, sendLocation, isConnected } = useWs();
+  const { driver } = useAuth();
 
   const hideBottomNav = HIDE_BOTTOM_NAV.includes(location.pathname);
   const activeNav = getActiveNav(location.pathname);
+
+  // Send driver's location every 10s using browser geolocation
+  useEffect(() => {
+    if (!driver) return;
+    let watchId: number | null = null;
+
+    if ("geolocation" in navigator) {
+      watchId = navigator.geolocation.watchPosition(
+        (pos) => sendLocation(pos.coords.latitude, pos.coords.longitude, pos.coords.speed ?? 0, pos.coords.heading ?? 0),
+        () => {}, // ignore errors silently
+        { enableHighAccuracy: false, maximumAge: 10000 }
+      );
+    }
+
+    return () => {
+      if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+    };
+  }, [driver, sendLocation]);
 
   return (
     <div
@@ -39,10 +60,19 @@ export function MobileShell() {
         background: "#0A1628",
       }}
     >
-      {/* Earthquake Alert Demo Button */}
-      {!showAlert && location.pathname === "/" && (
+      {/* WS connection dot — bottom-right corner, subtle */}
+      <div
+        className="fixed bottom-[88px] right-3 z-40 w-2 h-2 rounded-full"
+        style={{ background: isConnected ? "#10B981" : "#64748B", opacity: 0.7 }}
+        title={isConnected ? "リアルタイム接続中" : "オフライン"}
+      />
+
+      {/* Dev: earthquake test button */}
+      {!earthquakeAlert && location.pathname === "/" && (
         <button
-          onClick={() => setShowAlert(true)}
+          onClick={async () => {
+            await fetch("http://localhost:8765/dev/fire-alert", { method: "POST" }).catch(() => {});
+          }}
           className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-full text-[13px] text-white"
           style={{
             background: "rgba(239, 68, 68, 0.4)",
@@ -54,13 +84,14 @@ export function MobileShell() {
         </button>
       )}
 
-      {/* Earthquake Alert Overlay */}
+      {/* Earthquake Alert Overlay — driven by real WS event */}
       <AnimatePresence>
-        {showAlert && (
+        {earthquakeAlert && (
           <EarthquakeAlert
-            onDismiss={() => setShowAlert(false)}
+            data={earthquakeAlert}
+            onDismiss={dismissAlert}
             onNavigateToSafety={() => {
-              setShowAlert(false);
+              dismissAlert();
               navigate("/safety");
             }}
           />

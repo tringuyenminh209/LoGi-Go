@@ -1,4 +1,5 @@
-import { createBrowserRouter, Navigate, useNavigate, useParams } from "react-router";
+import { createBrowserRouter, Navigate, useNavigate, useParams, Outlet } from "react-router";
+import { useAuth } from "./context/AuthContext";
 import { MobileShell } from "./components/mobile/MobileShell";
 import { LoginScreen } from "./components/mobile/LoginScreen";
 import { HomeScreen } from "./components/mobile/HomeScreen";
@@ -12,6 +13,13 @@ import { SafetyInfoScreen } from "./components/mobile/SafetyInfoScreen";
 import { OcrReviewScreen } from "./components/mobile/OcrReviewScreen";
 import { CarbonDashboardScreen } from "./components/mobile/CarbonDashboardScreen";
 import { CertificationsScreen } from "./components/mobile/CertificationsScreen";
+
+// ─── Protected route ─────────────────────────────────────────────────────────
+
+function ProtectedRoute() {
+  const { isAuthenticated } = useAuth();
+  return isAuthenticated ? <Outlet /> : <Navigate to="/login" replace />;
+}
 
 // ─── Route adapters: bridge useNavigate → screen prop callbacks ───────────────
 
@@ -113,6 +121,9 @@ export const router = createBrowserRouter([
   { path: "/login", Component: LoginRoute },
   {
     path: "/",
+    Component: ProtectedRoute,
+    children: [{
+    path: "",
     Component: MobileShell,
     children: [
       { index: true, Component: HomeRoute },
@@ -128,5 +139,5 @@ export const router = createBrowserRouter([
       { path: "certifications", Component: CertificationsRoute },
       { path: "*", element: <Navigate to="/" replace /> },
     ],
-  },
+  }]},
 ]);

@@ -1,8 +1,10 @@
 import { AlertTriangle, MapPin, Navigation, CheckCircle2, Loader2, XCircle, Waves } from "lucide-react";
 import { motion } from "motion/react";
 import { useState, useEffect } from "react";
+import type { EarthquakePayload } from "../../context/WsContext";
 
 interface EarthquakeAlertProps {
+  data: EarthquakePayload;
   onDismiss: () => void;
   onNavigateToSafety?: () => void;
 }
@@ -14,27 +16,6 @@ const intensityConfig: Record<string, { bg: string; textBg: string; borderColor:
   "震度6弱": { bg: "#DC2626", textBg: "rgba(220,38,38,0.3)", borderColor: "rgba(220,38,38,0.6)" },
   "震度6強": { bg: "#991B1B", textBg: "rgba(153,27,27,0.4)", borderColor: "rgba(153,27,27,0.6)" },
   "震度7":  { bg: "#7F1D1D", textBg: "rgba(127,29,29,0.5)", borderColor: "rgba(127,29,29,0.7)" },
-};
-
-// Mock earthquake data
-const quakeData = {
-  intensity: "震度5強",
-  epicenter: "駿河湾",
-  depth: "40km",
-  magnitude: "M6.2",
-  sWaveSeconds: 28,
-  tsunami: {
-    hasWarning: true,
-    level: "津波注意報",
-    area: "太平洋沿岸",
-    height: "0.5m",
-    eta: "15分後",
-  },
-  autoResponses: [
-    { label: "減速指示送信済み", status: "done" as const },
-    { label: "ルート再計算中...", status: "loading" as const },
-    { label: "IOWN優先チャネル確保済み", status: "done" as const },
-  ],
 };
 
 function SWaveCountdown({ initialSeconds }: { initialSeconds: number }) {
@@ -77,7 +58,27 @@ function SWaveCountdown({ initialSeconds }: { initialSeconds: number }) {
   );
 }
 
-export function EarthquakeAlert({ onDismiss, onNavigateToSafety }: EarthquakeAlertProps) {
+export function EarthquakeAlert({ data, onDismiss, onNavigateToSafety }: EarthquakeAlertProps) {
+  const quakeData = {
+    intensity: data.intensity ?? "震度5強",
+    epicenter: data.epicenter ?? "不明",
+    depth: `${data.depth_km ?? "—"}km`,
+    magnitude: `M${data.magnitude ?? "—"}`,
+    sWaveSeconds: data.s_wave_seconds ?? 30,
+    tsunami: {
+      hasWarning: data.tsunami,
+      level: "津波注意報",
+      area: "太平洋沿岸",
+      height: "0.5m",
+      eta: "15分後",
+    },
+    autoResponses: [
+      { label: "減速指示送信済み", status: "done" as const },
+      { label: "ルート再計算中...", status: "loading" as const },
+      { label: "IOWN優先チャネル確保済み", status: "done" as const },
+    ],
+  };
+
   const config = intensityConfig[quakeData.intensity] || intensityConfig["震度5強"];
   const [responseStatuses, setResponseStatuses] = useState(quakeData.autoResponses.map((r) => r.status));
 

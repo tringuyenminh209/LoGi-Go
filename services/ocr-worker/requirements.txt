@@ -1,1 +1,6 @@
 flask==3.0.3
+pillow==10.4.0
+google-generativeai==0.7.2
+# Install separately for production GPU/CPU inference:
+# paddlepaddle==2.6.1
+# paddleocr==2.7.3

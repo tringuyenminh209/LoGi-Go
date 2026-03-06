@@ -1,30 +1,35 @@
 import { Truck, Eye, EyeOff, Fingerprint } from "lucide-react";
 import { motion } from "motion/react";
 import { useState } from "react";
+import { useAuth } from "../../context/AuthContext";
 
 interface LoginScreenProps {
   onLogin: () => void;
 }
 
 export function LoginScreen({ onLogin }: LoginScreenProps) {
+  const { login } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
     if (!email || !password) {
       setError("メールアドレスとパスワードを入力してください");
       return;
     }
     setError("");
     setIsLoading(true);
-    // Simulate login
-    setTimeout(() => {
-      setIsLoading(false);
+    try {
+      await login(email, password);
       onLogin();
-    }, 1200);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "ログインに失敗しました");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (

@@ -8,6 +8,7 @@ services:
     build:
       context: ./apps/mobile
       dockerfile: Dockerfile
+      target: dev
     ports:
       - "5173:5173"
     volumes:
@@ -56,9 +57,9 @@ services:
       - JWT_SECRET_PATH=/run/secrets/jwt_private_key
       - PG_DSN=postgres://logigo:logigo@postgres:5432/logigo?sslmode=disable
       - REDIS_ADDR=redis:6379
-      - MATCH_SVC_ADDR=match-svc:50054
+      - MATCH_SVC_ADDR=match-svc:8080
       - INGEST_SVC_ADDR=ingest-svc:50051
-      - LEGACY_BRIDGE_ADDR=legacy-bridge-svc:50052
+      - LEGACY_BRIDGE_ADDR=legacy-bridge-svc:8080
       - RESILIENCE_SVC_ADDR=resilience-svc:50055
       - WS_SERVER_ADDR=ws-server:8765
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
@@ -107,9 +108,9 @@ services:
       context: ./services/match-svc
       dockerfile: Dockerfile
     expose:
-      - "50054"
+      - "8080"
     environment:
-      - GRPC_PORT=50054
+      - HTTP_PORT=8080
       - REDIS_ADDR=redis:6379
       - PG_DSN=postgres://logigo:logigo@postgres:5432/logigo?sslmode=disable
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
@@ -158,9 +159,9 @@ services:
       context: ./services/legacy-bridge-svc
       dockerfile: Dockerfile
     expose:
-      - "50052"
+      - "8080"
     environment:
-      - GRPC_PORT=50052
+      - HTTP_PORT=8080
       - PG_DSN=postgres://logigo:logigo@postgres:5432/logigo?sslmode=disable
       - OCR_WORKER_URL=http://ocr-worker:8080
       - MINIO_ENDPOINT=minio:9000
