@@ -1,0 +1,357 @@
+name: logi-go
+
+services:
+  # ─────────────────────────────────────────────
+  # FRONTEND (React + Vite)
+  # ─────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./apps/mobile
+      dockerfile: Dockerfile
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./apps/mobile:/app
+      - /app/node_modules
+    environment:
+      - VITE_API_BASE_URL=http://localhost:8443
+      - VITE_WS_BASE_URL=ws://localhost:8765
+    depends_on:
+      - api-gateway
+    networks:
+      - logi-go-net
+
+  # ─────────────────────────────────────────────
+  # WEB DASHBOARD (React Admin)
+  # ─────────────────────────────────────────────
+  web-dashboard:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
+    ports:
+      - "5174:5174"
+    volumes:
+      - ./apps/web:/app
+      - /app/node_modules
+    environment:
+      - VITE_API_BASE_URL=http://localhost:8443
+      - VITE_WS_BASE_URL=ws://localhost:8765
+    depends_on:
+      - api-gateway
+    networks:
+      - logi-go-net
+
+  # ─────────────────────────────────────────────
+  # API GATEWAY — Go/Gin (REST, public)
+  # ─────────────────────────────────────────────
+  api-gateway:
+    build:
+      context: ./services/api-gateway
+      dockerfile: Dockerfile
+    ports:
+      - "8443:8443"
+    environment:
+      - PORT=8443
+      - ENV=development
+      - JWT_SECRET_PATH=/run/secrets/jwt_private_key
+      - PG_DSN=postgres://logigo:logigo@postgres:5432/logigo?sslmode=disable
+      - REDIS_ADDR=redis:6379
+      - MATCH_SVC_ADDR=match-svc:50054
+      - INGEST_SVC_ADDR=ingest-svc:50051
+      - LEGACY_BRIDGE_ADDR=legacy-bridge-svc:50052
+      - RESILIENCE_SVC_ADDR=resilience-svc:50055
+      - WS_SERVER_ADDR=ws-server:8765
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
+      - LOG_LEVEL=debug
+      - CORS_ORIGINS=http://localhost:5173
+    volumes:
+      - ./secrets:/run/secrets:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - logi-go-net
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────
+  # WEBSOCKET SERVER — Match notifications + EEW
+  # ─────────────────────────────────────────────
+  ws-server:
+    build:
+      context: ./services/ws-server
+      dockerfile: Dockerfile
+    ports:
+      - "8765:8765"
+    environment:
+      - PORT=8765
+      - REDIS_ADDR=redis:6379
+      - JWT_SECRET_PATH=/run/secrets/jwt_private_key
+      - JMA_MOCK_URL=ws://jma-mock:9999
+      - ENV=development
+    volumes:
+      - ./secrets:/run/secrets:ro
+    depends_on:
+      - redis
+      - jma-mock
+    networks:
+      - logi-go-net
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────
+  # MATCH SERVICE — H3 Spatial Engine
+  # ─────────────────────────────────────────────
+  match-svc:
+    build:
+      context: ./services/match-svc
+      dockerfile: Dockerfile
+    expose:
+      - "50054"
+    environment:
+      - GRPC_PORT=50054
+      - REDIS_ADDR=redis:6379
+      - PG_DSN=postgres://logigo:logigo@postgres:5432/logigo?sslmode=disable
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
+      - LOG_LEVEL=debug
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - logi-go-net
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────
+  # INGEST SERVICE — Worker Pool, EPCIS
+  # ─────────────────────────────────────────────
+  ingest-svc:
+    build:
+      context: ./services/ingest-svc
+      dockerfile: Dockerfile
+    expose:
+      - "50051"
+    environment:
+      - GRPC_PORT=50051
+      - REDIS_ADDR=redis:6379
+      - PG_DSN=postgres://logigo:logigo@postgres:5432/logigo?sslmode=disable
+      - MQTT_BROKER=tcp://mosquitto:1883
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
+      - LOG_LEVEL=debug
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mosquitto:
+        condition: service_started
+    networks:
+      - logi-go-net
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────
+  # LEGACY BRIDGE — OCR Orchestrator
+  # ─────────────────────────────────────────────
+  legacy-bridge-svc:
+    build:
+      context: ./services/legacy-bridge-svc
+      dockerfile: Dockerfile
+    expose:
+      - "50052"
+    environment:
+      - GRPC_PORT=50052
+      - PG_DSN=postgres://logigo:logigo@postgres:5432/logigo?sslmode=disable
+      - OCR_WORKER_URL=http://ocr-worker:8080
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin
+      - MINIO_BUCKET=logi-go-images
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-mock}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-mock}
+      - USE_MOCK_LLM=true # dev: mock LLM responses
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ocr-worker:
+        condition: service_started
+      minio:
+        condition: service_started
+    networks:
+      - logi-go-net
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────
+  # OCR WORKER — Python PaddleOCR
+  # ─────────────────────────────────────────────
+  ocr-worker:
+    build:
+      context: ./services/ocr-worker
+      dockerfile: Dockerfile
+    expose:
+      - "8080"
+    environment:
+      - PORT=8080
+      - USE_GPU=false # dev: CPU mode
+      - USE_MOCK=true # dev: return mock OCR results
+      - LOG_LEVEL=debug
+    networks:
+      - logi-go-net
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────
+  # RESILIENCE SERVICE — JMA EEW Handler
+  # ─────────────────────────────────────────────
+  resilience-svc:
+    build:
+      context: ./services/resilience-svc
+      dockerfile: Dockerfile
+    expose:
+      - "50055"
+    environment:
+      - GRPC_PORT=50055
+      - REDIS_ADDR=redis:6379
+      - PG_DSN=postgres://logigo:logigo@postgres:5432/logigo?sslmode=disable
+      - JMA_WS_URL=ws://jma-mock:9999 # dev: mock JMA server
+      - MQTT_BROKER=tcp://mosquitto:1883
+      - WS_SERVER_ADDR=ws-server:8765
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
+      - LOG_LEVEL=debug
+    depends_on:
+      - redis
+      - jma-mock
+      - mosquitto
+    networks:
+      - logi-go-net
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────
+  # JMA EEW MOCK — Simulate earthquake alerts
+  # ─────────────────────────────────────────────
+  jma-mock:
+    build:
+      context: ./services/jma-mock
+      dockerfile: Dockerfile
+    expose:
+      - "9999"
+    environment:
+      - PORT=9999
+      # Set to true để auto-fire mock earthquake every 60s (chaos testing)
+      - AUTO_FIRE=false
+      - AUTO_FIRE_INTERVAL=60
+    networks:
+      - logi-go-net
+
+  # ─────────────────────────────────────────────
+  # POSTGRESQL 16 + TIMESCALEDB + POSTGIS
+  # ─────────────────────────────────────────────
+  postgres:
+    image: timescale/timescaledb-ha:pg16
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_DB=logigo
+      - POSTGRES_USER=logigo
+      - POSTGRES_PASSWORD=logigo
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./migrations/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U logigo -d logigo" ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - logi-go-net
+
+  # ─────────────────────────────────────────────
+  # REDIS 7 + REDISEARCH
+  # ─────────────────────────────────────────────
+  redis:
+    image: redis/redis-stack:7.2.0-v9
+    ports:
+      - "6379:6379"
+      - "8001:8001" # RedisInsight UI
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - logi-go-net
+
+  # ─────────────────────────────────────────────
+  # MOSQUITTO — MQTT Broker (IoT location)
+  # ─────────────────────────────────────────────
+  mosquitto:
+    image: eclipse-mosquitto:2.0
+    ports:
+      - "1883:1883"
+      - "9001:9001" # WebSocket MQTT
+    volumes:
+      - ./infra/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - mosquitto_data:/mosquitto/data
+    networks:
+      - logi-go-net
+
+  # ─────────────────────────────────────────────
+  # MINIO — S3-compatible object storage (dev)
+  # ─────────────────────────────────────────────
+  minio:
+    image: minio/minio:latest
+    ports:
+      - "9000:9000"
+      - "9090:9090" # MinIO Console UI
+    environment:
+      - MINIO_ROOT_USER=minioadmin
+      - MINIO_ROOT_PASSWORD=minioadmin
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9090"
+    networks:
+      - logi-go-net
+
+  # ─────────────────────────────────────────────
+  # JAEGER — Distributed tracing
+  # ─────────────────────────────────────────────
+  jaeger:
+    image: jaegertracing/all-in-one:1.57
+    ports:
+      - "16686:16686" # Jaeger UI
+      - "4317:4317" # OTLP gRPC
+      - "4318:4318" # OTLP HTTP
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    networks:
+      - logi-go-net
+
+  # ─────────────────────────────────────────────
+  # GRAFANA — Metrics dashboard
+  # ─────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:10.4.0
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./infra/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+    networks:
+      - logi-go-net
+
+volumes:
+  postgres_data:
+  redis_data:
+  mosquitto_data:
+  minio_data:
+  grafana_data:
+
+
+networks:
+  logi-go-net:
+    driver: bridge

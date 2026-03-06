@@ -1,0 +1,20 @@
+{
+  "name": "logi-go",
+  "private": true,
+  "version": "0.0.1",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:mobile": "npm run dev --workspace=apps/mobile",
+    "dev:web": "npm run dev --workspace=apps/web",
+    "build:mobile": "npm run build --workspace=apps/mobile",
+    "build:web": "npm run build --workspace=apps/web",
+    "build": "npm run build --workspaces --if-present",
+    "install:all": "npm install --legacy-peer-deps"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

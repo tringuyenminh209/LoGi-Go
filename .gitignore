@@ -1,8 +1,77 @@
-# Documentation
-docs/
+# ─── Environment ───────────────────────────────
+.env
+.env.local
+.env.*.local
 
-# NotebookLM
+# ─── Secrets ───────────────────────────────────
+secrets/
+*.pem
+
+# ─── Node / Frontend ───────────────────────────
+node_modules/
+apps/*/node_modules/
+packages/*/node_modules/
+apps/*/dist/
+apps/*/build/
+packages/*/dist/
+coverage/
+.eslintcache
+*.tsbuildinfo
+
+# ─── Logs ──────────────────────────────────────
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ─── Vite ──────────────────────────────────────
+*.local
+
+# ─── Go backend ────────────────────────────────
+services/*/bin/
+services/*/*.exe
+services/*/vendor/
+services/*/tmp/
+*.test
+coverage.out
+coverage.html
+
+# ─── Docker ────────────────────────────────────
+.docker/
+docker-compose.override.yml
+
+# ─── Python (OCR worker / NotebookLM) ──────────
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+
+# ─── OS ────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ─── IDE ───────────────────────────────────────
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# ─── Claude ────────────────────────────────────
+.claude/
+
+# ─── NotebookLM (vendored tool, not project code) ──
 NotebookLM-Antigravity/
 
-# Claude
-.claude/
+# ─── Terraform ─────────────────────────────────
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+
+#docs
+docs/
