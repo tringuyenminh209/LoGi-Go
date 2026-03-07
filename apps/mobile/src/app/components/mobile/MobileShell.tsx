@@ -15,6 +15,7 @@ const NAV_ACTIVE_MAP: Record<string, string> = {
   "/jobs": "jobs",
   "/profile": "profile",
   "/ocr-review": "profile",
+  "/camera-upload": "home",
   "/carbon": "profile",
   "/certifications": "profile",
 };

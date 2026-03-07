@@ -58,7 +58,7 @@ services:
       - PG_DSN=postgres://logigo:logigo@postgres:5432/logigo?sslmode=disable
       - REDIS_ADDR=redis:6379
       - MATCH_SVC_ADDR=match-svc:8080
-      - INGEST_SVC_ADDR=ingest-svc:50051
+      - INGEST_SVC_ADDR=ingest-svc:8080
       - LEGACY_BRIDGE_ADDR=legacy-bridge-svc:8080
       - RESILIENCE_SVC_ADDR=resilience-svc:50055
       - WS_SERVER_ADDR=ws-server:8765
@@ -132,9 +132,9 @@ services:
       context: ./services/ingest-svc
       dockerfile: Dockerfile
     expose:
-      - "50051"
+      - "8080"
     environment:
-      - GRPC_PORT=50051
+      - HTTP_PORT=8080
       - REDIS_ADDR=redis:6379
       - PG_DSN=postgres://logigo:logigo@postgres:5432/logigo?sslmode=disable
       - MQTT_BROKER=tcp://mosquitto:1883
@@ -209,20 +209,21 @@ services:
       context: ./services/resilience-svc
       dockerfile: Dockerfile
     expose:
-      - "50055"
+      - "8080"
     environment:
-      - GRPC_PORT=50055
+      - HTTP_PORT=8080
       - REDIS_ADDR=redis:6379
       - PG_DSN=postgres://logigo:logigo@postgres:5432/logigo?sslmode=disable
-      - JMA_WS_URL=ws://jma-mock:9999 # dev: mock JMA server
-      - MQTT_BROKER=tcp://mosquitto:1883
-      - WS_SERVER_ADDR=ws-server:8765
+      - JMA_WS_URL=ws://jma-mock:9999/ws
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
       - LOG_LEVEL=debug
     depends_on:
-      - redis
-      - jma-mock
-      - mosquitto
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      jma-mock:
+        condition: service_started
     networks:
       - logi-go-net
     restart: unless-stopped

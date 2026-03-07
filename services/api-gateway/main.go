@@ -92,7 +92,13 @@ func main() {
 
 	// Carbon & Certifications
 	mux.HandleFunc("GET /api/v1/carbon/summary", auth(handler.CarbonSummary))
+	mux.HandleFunc("POST /api/v1/carbon/calculate", auth(handler.CarbonCalculate))
 	mux.HandleFunc("GET /api/v1/certifications", auth(handler.ListCertifications))
+
+	// Admin
+	mux.HandleFunc("GET /api/v1/admin/dashboard/stats", auth(handler.DashboardStats))
+	mux.HandleFunc("GET /api/v1/admin/drivers", auth(handler.ListDrivers))
+	mux.HandleFunc("GET /api/v1/admin/tenants", auth(handler.ListTenants))
 
 	// Debug
 	mux.HandleFunc("POST /api/v1/debug/trigger-match", func(w http.ResponseWriter, r *http.Request) {
@@ -103,7 +109,7 @@ func main() {
 	corsOrigins := env("CORS_ORIGINS", "http://localhost:5173")
 
 	slog.Info("api-gateway starting", "port", port, "env", env("ENV", "development"))
-	if err := http.ListenAndServe(":"+port, middleware.CORS(corsOrigins)(mux)); err != nil {
+	if err := http.ListenAndServe(":"+port, middleware.RateLimit(middleware.CORS(corsOrigins)(mux))); err != nil {
 		slog.Error("server failed", "error", err)
 		os.Exit(1)
 	}

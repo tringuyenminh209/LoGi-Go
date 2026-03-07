@@ -29,21 +29,20 @@ export function LoginPage() {
     return <Navigate to="/" replace />;
   }
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError(false);
-    setTimeout(() => {
-      if (email === "admin@logi-go.jp" && password === "demo1234") {
-        const selectedRole = roles.find(r => r.value === role)!;
-        login({ email, role, roleLabel: selectedRole.label });
-        navigate("/");
-      } else {
-        setError(true);
-        setLoading(false);
-        toast.error("メールアドレスまたはパスワードが正しくありません");
-      }
-    }, 800);
+    try {
+      const selectedRole = roles.find(r => r.value === role)!;
+      await login(email, password, role, selectedRole.label);
+      navigate("/");
+    } catch (err: unknown) {
+      setError(true);
+      setLoading(false);
+      const msg = err instanceof Error ? err.message : "メールアドレスまたはパスワードが正しくありません";
+      toast.error(msg);
+    }
   };
 
   const fillDemo = () => {

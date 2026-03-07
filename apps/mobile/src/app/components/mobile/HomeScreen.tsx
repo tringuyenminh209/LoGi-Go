@@ -1,4 +1,4 @@
-import { Bell, Truck, Package, Map, Shield, ChevronRight, TrendingUp } from "lucide-react";
+import { Bell, Truck, Package, Map, Shield, ChevronRight, TrendingUp, Camera } from "lucide-react";
 import { motion } from "motion/react";
 import { useAuth } from "../../context/AuthContext";
 import { useShipments, useMatchProposals, useNotifications } from "../../hooks/useDomain";
@@ -171,6 +171,21 @@ export function HomeScreen({ onNavigate, onShowMatch, onShowNotifications, onSho
             </div>
             <span className="text-white text-[15px] block" style={{ fontFamily: "'Noto Sans JP', sans-serif", fontWeight: 600 }}>安全情報</span>
             <span className="text-[#10B981] text-[12px]" style={{ fontFamily: "'Noto Sans JP', sans-serif" }}>異常なし</span>
+          </motion.button>
+
+          <motion.button
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.5 }}
+            onClick={() => onNavigate("camera-upload")}
+            className="rounded-2xl p-5 border border-slate-700/50 text-left"
+            style={{ background: "rgba(168, 85, 247, 0.1)" }}
+          >
+            <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-3" style={{ background: "rgba(168, 85, 247, 0.2)" }}>
+              <Camera size={24} className="text-[#A855F7]" />
+            </div>
+            <span className="text-white text-[15px] block" style={{ fontFamily: "'Noto Sans JP', sans-serif", fontWeight: 600 }}>FAX/OCR</span>
+            <span className="text-slate-400 text-[12px]" style={{ fontFamily: "'Noto Sans JP', sans-serif" }}>撮影・読取</span>
           </motion.button>
         </div>
       </div>

@@ -13,6 +13,7 @@ import { SafetyInfoScreen } from "./components/mobile/SafetyInfoScreen";
 import { OcrReviewScreen } from "./components/mobile/OcrReviewScreen";
 import { CarbonDashboardScreen } from "./components/mobile/CarbonDashboardScreen";
 import { CertificationsScreen } from "./components/mobile/CertificationsScreen";
+import { CameraUpload } from "./components/mobile/CameraUpload";
 
 // ─── Protected route ─────────────────────────────────────────────────────────
 
@@ -115,6 +116,11 @@ function CertificationsRoute() {
   return <CertificationsScreen onBack={() => nav(-1)} />;
 }
 
+function CameraUploadRoute() {
+  const nav = useNavigate();
+  return <CameraUpload onBack={() => nav(-1)} onSuccess={() => nav("/ocr-review")} />;
+}
+
 // ─── Router ──────────────────────────────────────────────────────────────────
 
 export const router = createBrowserRouter([
@@ -137,6 +143,7 @@ export const router = createBrowserRouter([
       { path: "ocr-review", Component: OcrReviewRoute },
       { path: "carbon", Component: CarbonRoute },
       { path: "certifications", Component: CertificationsRoute },
+      { path: "camera-upload", Component: CameraUploadRoute },
       { path: "*", element: <Navigate to="/" replace /> },
     ],
   }]},
